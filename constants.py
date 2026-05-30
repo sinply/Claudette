@@ -1,4 +1,4 @@
-﻿import sublime
+import sublime
 
 ANTHROPIC_VERSION = "2023-06-01"
 DEFAULT_MODEL = "claude-sonnet-4-5"

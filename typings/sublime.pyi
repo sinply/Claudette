@@ -1,4 +1,4 @@
-﻿"""Minimal stubs for Sublime Text's embedded sublime module."""
+"""Minimal stubs for Sublime Text's embedded sublime module."""
 
 from typing import Any, Callable, Iterable, Sequence, Tuple, Union, overload
 
