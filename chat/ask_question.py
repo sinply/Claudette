@@ -13,6 +13,26 @@ from ..utils import (
 )
 from .chat_view import ClaudetteChatView
 
+# Module-level references to prevent GC of input panel callbacks (ST4 bug)
+_pending_self = None
+_pending_code = ""
+_pending_is_new = False
+_pending_callback = None
+
+
+def _show_input_panel(window, cmd_instance, code, is_new):
+    """Show the input panel with a module-level callback reference."""
+    global _pending_callback
+
+    def on_done(q):
+        print("[Claudette DEBUG] on_done triggered, q=", repr(q[:80]))
+        cmd_instance.handle_input(code, q)
+
+    _pending_callback = on_done  # Prevent GC
+    prompt = "Ask Claude (New Chat):" if is_new else "Ask Claude:"
+    v = window.show_input_panel(prompt, "", on_done, None, None)
+    print("[Claudette DEBUG] input panel created, view=", v)
+
 
 class ClaudetteAskQuestionCommand(sublime_plugin.WindowCommand):
     """WindowCommand so Tools menu works without a focused editor view."""
@@ -128,37 +148,21 @@ class ClaudetteAskQuestionCommand(sublime_plugin.WindowCommand):
 
             active = window.active_view()
             sel = active.sel() if active else None
-            self._ask_selected_text = (
+            _pending_code = (
                 active.substr(sel[0])
                 if active and sel is not None and len(sel) > 0
                 else ""
             )
+            _pending_self = self
+            _pending_is_new = False
 
-            # Store on instance so callback references survive after run()
-            self._ask_window = window
-            self._ask_on_done = lambda q: self._handle_panel_done(q)
-
-            sublime.set_timeout(lambda: self._show_ask_panel(), 10)
+            sublime.set_timeout(lambda: _show_input_panel(window, _pending_self, _pending_code, _pending_is_new), 10)
 
         except Exception as e:
             print(f"{PLUGIN_NAME} Error in run command: {str(e)}")
             sublime.error_message(
                 f"{PLUGIN_NAME} Error: Could not process request"
             )
-
-    def _show_ask_panel(self):
-        v = self._ask_window.show_input_panel(
-            "Ask Claude:",
-            "",
-            self._ask_on_done,
-            None,
-            None,
-        )
-        print("[Claudette DEBUG] input panel created, view=", v)
-
-    def _handle_panel_done(self, q):
-        print("[Claudette DEBUG] on_done triggered, q=", repr(q[:80]))
-        self.handle_input(self._ask_selected_text, q)
 
     def send_to_claude(self, code, question):
         print("[Claudette DEBUG] send_to_claude called, question=", repr(question[:80]))
@@ -325,34 +329,10 @@ class ClaudetteAskNewQuestionCommand(sublime_plugin.WindowCommand):
             if not ask_command.create_chat_panel(force_new=True):
                 return
 
-            self._ask_new_window = window
-            self._ask_new_cmd = ask_command
-
-            def show_panel():
-                self._ask_new_cmd._ask_selected_text = ""
-                self._ask_new_cmd._ask_window = window
-                self._ask_new_cmd._ask_on_done = lambda q: self._handle_new_panel_done(q)
-                v = window.show_input_panel(
-                    "Ask Claude (New Chat):",
-                    "",
-                    self._ask_new_cmd._ask_on_done,
-                    None,
-                    None,
-                )
-                if not v:
-                    print(f"{PLUGIN_NAME} Error: Could not create input panel")
-                    sublime.error_message(
-                        f"{PLUGIN_NAME} Error: Could not create input panel"
-                    )
-
-            sublime.set_timeout(show_panel, 10)
+            sublime.set_timeout(lambda: _show_input_panel(window, ask_command, "", True), 10)
 
         except Exception as e:
             print(f"{PLUGIN_NAME} Error in run command: {str(e)}")
             sublime.error_message(
                 f"{PLUGIN_NAME} Error: Could not process request"
             )
-
-    def _handle_new_panel_done(self, q):
-        print("[Claudette DEBUG] new_panel on_done triggered, q=", repr(q[:80]))
-        self._ask_new_cmd.handle_input(self._ask_new_cmd._ask_selected_text, q)
