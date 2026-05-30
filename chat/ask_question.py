@@ -128,33 +128,37 @@ class ClaudetteAskQuestionCommand(sublime_plugin.WindowCommand):
 
             active = window.active_view()
             sel = active.sel() if active else None
-            selected_text = (
+            self._ask_selected_text = (
                 active.substr(sel[0])
                 if active and sel is not None and len(sel) > 0
                 else ""
             )
 
-            def on_done_callback(q):
-                print("[Claudette DEBUG] on_done_callback triggered, q=", repr(q[:80]))
-                self.handle_input(selected_text, q)
+            # Store on instance so callback references survive after run()
+            self._ask_window = window
+            self._ask_on_done = lambda q: self._handle_panel_done(q)
 
-            def show_panel():
-                v = window.show_input_panel(
-                    "Ask Claude:",
-                    "",
-                    on_done_callback,
-                    None,
-                    None,
-                )
-                print("[Claudette DEBUG] input panel created, view=", v)
-
-            sublime.set_timeout(show_panel, 10)
+            sublime.set_timeout(lambda: self._show_ask_panel(), 10)
 
         except Exception as e:
             print(f"{PLUGIN_NAME} Error in run command: {str(e)}")
             sublime.error_message(
                 f"{PLUGIN_NAME} Error: Could not process request"
             )
+
+    def _show_ask_panel(self):
+        v = self._ask_window.show_input_panel(
+            "Ask Claude:",
+            "",
+            self._ask_on_done,
+            None,
+            None,
+        )
+        print("[Claudette DEBUG] input panel created, view=", v)
+
+    def _handle_panel_done(self, q):
+        print("[Claudette DEBUG] on_done triggered, q=", repr(q[:80]))
+        self.handle_input(self._ask_selected_text, q)
 
     def send_to_claude(self, code, question):
         print("[Claudette DEBUG] send_to_claude called, question=", repr(question[:80]))
@@ -321,22 +325,17 @@ class ClaudetteAskNewQuestionCommand(sublime_plugin.WindowCommand):
             if not ask_command.create_chat_panel(force_new=True):
                 return
 
-            def input_done(q):
-                print("[Claudette DEBUG] input_done triggered, q=", repr(q[:80]))
-                active = window.active_view()
-                sel = active.sel() if active else None
-                code = (
-                    active.substr(sel[0])
-                    if active and sel is not None and len(sel) > 0
-                    else ""
-                )
-                ask_command.handle_input(code, q)
+            self._ask_new_window = window
+            self._ask_new_cmd = ask_command
 
             def show_panel():
+                self._ask_new_cmd._ask_selected_text = ""
+                self._ask_new_cmd._ask_window = window
+                self._ask_new_cmd._ask_on_done = lambda q: self._handle_new_panel_done(q)
                 v = window.show_input_panel(
                     "Ask Claude (New Chat):",
                     "",
-                    input_done,
+                    self._ask_new_cmd._ask_on_done,
                     None,
                     None,
                 )
@@ -353,3 +352,7 @@ class ClaudetteAskNewQuestionCommand(sublime_plugin.WindowCommand):
             sublime.error_message(
                 f"{PLUGIN_NAME} Error: Could not process request"
             )
+
+    def _handle_new_panel_done(self, q):
+        print("[Claudette DEBUG] new_panel on_done triggered, q=", repr(q[:80]))
+        self._ask_new_cmd.handle_input(self._ask_new_cmd._ask_selected_text, q)
