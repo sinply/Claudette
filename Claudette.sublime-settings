@@ -116,7 +116,7 @@
 		// DeepSeek API key. Same format as api_key: string or {keys: [...], active_key: N}
 		"api_key": "",
 		// DeepSeek base URL
-		"base_url": "https://api.deepseek.com/v1/",
+		"base_url": "https://api.deepseek.com/anthropic/",
 		// DeepSeek model to use (e.g. "deepseek-chat", "deepseek-reasoner")
 		"model": "deepseek-chat",
 		// DeepSeek pricing per 1M tokens (USD). Add entries for models you use.
