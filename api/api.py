@@ -23,7 +23,12 @@ from ..tools.text_editor import (
     resolve_path,
     run_text_editor_tool,
 )
-from ..utils import claudette_chat_status_message, claudette_get_api_key_value
+from ..utils import (
+    claudette_chat_status_message,
+    claudette_get_api_key_value,
+    claudette_get_key_base_url,
+    claudette_get_key_model,
+)
 from . import session_stats
 from .cancellation import CancellationToken
 from .errors import (
@@ -51,15 +56,22 @@ class ClaudetteClaudeAPI:
     def __init__(self):
         self.settings = sublime.load_settings(SETTINGS_FILE)
         self.api_key = claudette_get_api_key_value()
-        self.base_url = self.settings.get("base_url", DEFAULT_BASE_URL)
+        # Key-level overrides take precedence over top-level settings
+        self.base_url = (
+            claudette_get_key_base_url()
+            or self.settings.get("base_url", DEFAULT_BASE_URL)
+        )
         self.is_anthropic = is_anthropic(self.base_url)
+        self.model = (
+            claudette_get_key_model()
+            or self.settings.get("model", DEFAULT_MODEL)
+        )
         if not self.base_url.endswith("/"):
             self.base_url += "/"
         try:
             self.max_tokens = int(self.settings.get("max_tokens", MAX_TOKENS))
         except (TypeError, ValueError):
             self.max_tokens = MAX_TOKENS
-        self.model = self.settings.get("model", DEFAULT_MODEL)
         self.temperature = self.settings.get("temperature", "1.0")
         self.session_cost = 0.0
         self.session_input_tokens = 0

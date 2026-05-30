@@ -295,3 +295,19 @@ def claudette_get_api_key_name():
         return api_key.get("name", "Default")
 
     return "Undefined"
+
+
+def claudette_get_key_base_url():
+    """Return the active key's base_url, or None if not set on the key."""
+    entry = claudette_get_api_key()
+    if isinstance(entry, dict):
+        return entry.get("base_url") or None
+    return None
+
+
+def claudette_get_key_model():
+    """Return the active key's model, or None if not set on the key."""
+    entry = claudette_get_api_key()
+    if isinstance(entry, dict):
+        return entry.get("model") or None
+    return None
