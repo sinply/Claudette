@@ -937,8 +937,8 @@ class ClaudetteClaudeAPI:
                                     stream_current_block_type = None
                                     stream_current_block_index = None
 
-                            # Handle content updates (text and optional
-                            # citations)
+                            # Handle content updates (text, thinking,
+                            # and optional citations)
                             if "delta" in data:
                                 delta = data["delta"]
                                 text = delta.get("text")
@@ -948,6 +948,19 @@ class ClaudetteClaudeAPI:
                                 ):
                                     sublime.set_timeout(
                                         lambda t=text: chunk_callback(
+                                            t, is_done=False
+                                        ),
+                                        0,
+                                    )
+                                # Render thinking content from
+                                # reasoning models (e.g. DeepSeek v4)
+                                thinking = delta.get("thinking")
+                                if (
+                                    thinking
+                                    and delta.get("type") == "thinking_delta"
+                                ):
+                                    sublime.set_timeout(
+                                        lambda t=thinking: chunk_callback(
                                             t, is_done=False
                                         ),
                                         0,
