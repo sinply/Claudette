@@ -33,6 +33,7 @@ def _show_input_panel(window, cmd_instance, code, is_new):
     _pending_submitted = False
 
     def on_done(q):
+        global _pending_submitted
         print("[Claudette DEBUG] on_done, q=", repr(q[:80]))
         if _pending_submitted:
             return
@@ -40,13 +41,13 @@ def _show_input_panel(window, cmd_instance, code, is_new):
         cmd_instance.handle_input(code, q)
 
     def on_change(current_text):
+        global _pending_submitted
         if _pending_submitted:
             return
         if current_text.endswith("\n"):
             _pending_submitted = True
             q = current_text.rstrip("\n")
-            print("[Claudette DEBUG] Enter detected via on_change, q=", repr(q[:80]))
-            # Hide the panel by showing a no-op quick panel then dismissing
+            print("[Claudette DEBUG] Enter detected, q=", repr(q[:80]))
             window.run_command("hide_panel", {"cancel": True})
             cmd_instance.handle_input(code, q)
 
