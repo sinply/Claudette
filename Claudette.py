@@ -37,7 +37,6 @@ from .statusbar.spinner import ClaudetteSpinner
 
 
 def plugin_loaded():
-    print("[Claudette DEBUG] plugin_loaded() called")
     spinner = ClaudetteSpinner()
     spinner.start("Claudette", 1000)
 

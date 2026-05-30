@@ -633,18 +633,12 @@ class ClaudetteClaudeAPI:
         If cancellation_token is provided, checks for cancellation during
         streaming and exits early if cancelled.
         """
-        print("[Claudette DEBUG] stream_response called")
-        print("[Claudette DEBUG] url=", self.base_url + "messages")
-        print("[Claudette DEBUG] is_anthropic=", self.is_anthropic)
-        print("[Claudette DEBUG] model=", self.model)
-        print("[Claudette DEBUG] has_key=", bool(self.api_key))
         input_tokens = 0
         output_tokens = 0
         web_search_requests = 0
         cache_info = ""
 
         def handle_error(error_msg):
-            print("[Claudette DEBUG] handle_error:", error_msg)
             sublime.set_timeout(
                 lambda: chunk_callback(error_msg, is_done=True), 0
             )

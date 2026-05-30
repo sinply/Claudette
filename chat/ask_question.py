@@ -13,10 +13,7 @@ from ..utils import (
 )
 from .chat_view import ClaudetteChatView
 
-# Module-level references to prevent GC of input panel callbacks (ST4 bug)
-_pending_self = None
-_pending_code = ""
-_pending_is_new = False
+# Module-level reference to prevent GC of input panel callbacks
 _pending_callback = None
 _pending_submitted = False
 
@@ -34,7 +31,6 @@ def _show_input_panel(window, cmd_instance, code, is_new):
 
     def on_done(q):
         global _pending_submitted
-        print("[Claudette DEBUG] on_done, q=", repr(q[:80]))
         if _pending_submitted:
             return
         _pending_submitted = True
@@ -47,17 +43,15 @@ def _show_input_panel(window, cmd_instance, code, is_new):
         if current_text.endswith("\n"):
             _pending_submitted = True
             q = current_text.rstrip("\n")
-            print("[Claudette DEBUG] Enter detected, q=", repr(q[:80]))
             window.run_command("hide_panel", {"cancel": True})
             cmd_instance.handle_input(code, q)
 
     def on_cancel():
-        print("[Claudette DEBUG] on_cancel")
+        pass
 
     _pending_callback = (on_done, on_change, on_cancel)  # Prevent GC
     prompt = "Ask Claude (New Chat):" if is_new else "Ask Claude:"
-    v = window.show_input_panel(prompt, "", on_done, on_change, on_cancel)
-    print("[Claudette DEBUG] input panel created, view=", v)
+    window.show_input_panel(prompt, "", on_done, on_change, on_cancel)
 
 
 class ClaudetteAskQuestionCommand(sublime_plugin.WindowCommand):
@@ -117,7 +111,6 @@ class ClaudetteAskQuestionCommand(sublime_plugin.WindowCommand):
             return None
 
     def handle_input(self, code, question):
-        print("[Claudette DEBUG] handle_input called, question=", repr(question[:50] if question else None))
         if not question or question.strip() == "":
             return None
 
@@ -154,7 +147,6 @@ class ClaudetteAskQuestionCommand(sublime_plugin.WindowCommand):
         self.send_to_claude(code, question.strip())
 
     def run(self, code=None, question=None):
-        print("[Claudette DEBUG] AskQuestionCommand.run() called")
         try:
             self.load_settings()
 
@@ -191,10 +183,8 @@ class ClaudetteAskQuestionCommand(sublime_plugin.WindowCommand):
             )
 
     def send_to_claude(self, code, question):
-        print("[Claudette DEBUG] send_to_claude called, question=", repr(question[:80]))
         try:
             if not self.chat_view:
-                print("[Claudette DEBUG] no chat_view, returning")
                 return
 
             message = "\n\n---\n\n" if self.chat_view.get_size() > 0 else ""
