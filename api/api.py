@@ -31,7 +31,7 @@ from .errors import (
     is_model_not_found_error,
     parse_api_error,
 )
-from .provider import get_provider, provider_label
+from .provider import is_anthropic
 from .session_stats import format_status_message, update_session_stats
 from .tools import (
     build_text_editor_tool_def,
@@ -50,9 +50,9 @@ class CancelledException(Exception):
 class ClaudetteClaudeAPI:
     def __init__(self):
         self.settings = sublime.load_settings(SETTINGS_FILE)
-        self.provider = get_provider(self.settings)
         self.api_key = claudette_get_api_key_value()
         self.base_url = self.settings.get("base_url", DEFAULT_BASE_URL)
+        self.is_anthropic = is_anthropic(self.base_url)
         try:
             self.max_tokens = int(self.settings.get("max_tokens", MAX_TOKENS))
         except (TypeError, ValueError):
@@ -195,7 +195,7 @@ class ClaudetteClaudeAPI:
 
                 if combined_content != "<reference_files>\n</reference_files>":
                     system_message = {"type": "text", "text": combined_content}
-                    if self.provider == "anthropic":
+                    if self.is_anthropic:
                         system_message["cache_control"] = {"type": "ephemeral"}
                     system_messages.append(system_message)
 
@@ -220,7 +220,7 @@ class ClaudetteClaudeAPI:
             "x-api-key": self.api_key,
             "content-type": "application/json",
         }
-        if self.provider == "anthropic":
+        if self.is_anthropic:
             headers["anthropic-version"] = ANTHROPIC_VERSION
         headers.update(self._get_custom_headers())
 
@@ -315,7 +315,7 @@ class ClaudetteClaudeAPI:
             )
             return
 
-        if self.provider != "anthropic":
+        if not self.is_anthropic:
             handle_error(
                 "[Error] The text editor tool is only available when using "
                 "the Anthropic API."
@@ -663,7 +663,7 @@ class ClaudetteClaudeAPI:
                 "x-api-key": self.api_key,
                 "content-type": "application/json",
             }
-            if self.provider == "anthropic":
+            if self.is_anthropic:
                 headers["anthropic-version"] = ANTHROPIC_VERSION
             headers.update(self._get_custom_headers())
 
@@ -683,7 +683,7 @@ class ClaudetteClaudeAPI:
             }
 
             web_search_tool = build_web_search_tool_def(self.settings)
-            if web_search_tool and self.provider == "anthropic":
+            if web_search_tool and self.is_anthropic:
                 data["tools"] = [web_search_tool]
 
             req = urllib.request.Request(
@@ -1095,7 +1095,7 @@ class ClaudetteClaudeAPI:
             headers = {
                 "x-api-key": self.api_key,
             }
-            if self.provider == "anthropic":
+            if self.is_anthropic:
                 headers["anthropic-version"] = ANTHROPIC_VERSION
             headers.update(self._get_custom_headers())
 
@@ -1113,32 +1113,29 @@ class ClaudetteClaudeAPI:
                 return model_ids
 
         except urllib.error.HTTPError as e:
-            api_label = provider_label(self.provider)
             if e.code == 401:
-                print("{0} API: {1}".format(api_label, str(e)))
+                print("Claude API: {0}".format(str(e)))
                 sublime.error_message(
                     "Authentication invalid when fetching the available "
-                    "models from the {0} API.".format(api_label)
+                    "models from the Claude API."
                 )
             else:
-                print("{0} API: {1}".format(api_label, str(e)))
+                print("Claude API: {0}".format(str(e)))
                 sublime.error_message(
                     "An error occurred fetching the available models from "
-                    "the {0} API.".format(api_label)
+                    "the Claude API."
                 )
         except urllib.error.URLError as e:
-            api_label = provider_label(self.provider)
-            print("{0} API: {1}".format(api_label, str(e)))
+            print("Claude API: {0}".format(str(e)))
             sublime.error_message(
                 "An error occurred fetching the available models from the "
-                "{0} API.".format(api_label)
+                "Claude API."
             )
         except Exception as e:
-            api_label = provider_label(self.provider)
-            print("{0} API: {1}".format(api_label, str(e)))
+            print("Claude API: {0}".format(str(e)))
             sublime.error_message(
                 "An error occurred fetching the available models from the "
-                "{0} API.".format(api_label)
+                "Claude API."
             )
         finally:
             sublime.status_message("")

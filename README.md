@@ -23,7 +23,6 @@ A [Sublime Text](http://www.sublimetext.com) package that integrates AI chat int
 **DeepSeek:**
 ```jsonc
 {
-    "api_provider": "deepseek",
     "api_key": "sk-your-key-here",
     "model": "deepseek-chat",
     "base_url": "https://api.deepseek.com/anthropic/"
@@ -33,14 +32,13 @@ A [Sublime Text](http://www.sublimetext.com) package that integrates AI chat int
 **Any other Anthropic-compatible API:**
 ```jsonc
 {
-    "api_provider": "your-provider-name",
     "api_key": "your-key",
     "model": "your-model",
     "base_url": "https://your-endpoint/v1/"
 }
 ```
 
-That's it — `api_provider` controls UI labels and disables Anthropic-only features (web search, text editor tool, cache control). Everything else works the same.
+That's it — just change `base_url`, `model`, and `api_key`. The plugin auto-detects third-party APIs by comparing `base_url` to the Anthropic default and disables Anthropic-only features (web search, text editor tool, cache_control, anthropic-version header) automatically. UI labels always show "Claude".
 
 ### 3. Ask a Question
 
@@ -78,9 +76,8 @@ All commands via *Tools > Claudette* or the command palette.
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `api_provider` | `"anthropic"` | `"anthropic"` for Claude, or any name for a third-party API |
 | `api_key` | `""` | API key (string or `{keys: [...], active_key: N}`) |
-| `base_url` | `"https://api.anthropic.com/v1/"` | API base URL |
+| `base_url` | `"https://api.anthropic.com/v1/"` | API base URL. When changed, Anthropic-only features are auto-disabled |
 | `model` | `"claude-sonnet-4-5"` | Model name |
 | `max_tokens` | `8192` | Max output tokens per response |
 | `temperature` | `"1.0"` | Temperature (0.0–1.0) |

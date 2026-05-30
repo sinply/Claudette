@@ -23,7 +23,6 @@
 **DeepSeek：**
 ```jsonc
 {
-    "api_provider": "deepseek",
     "api_key": "sk-你的key",
     "model": "deepseek-chat",
     "base_url": "https://api.deepseek.com/anthropic/"
@@ -33,14 +32,13 @@
 **其他 Anthropic 兼容 API：**
 ```jsonc
 {
-    "api_provider": "你的供应商名",
     "api_key": "你的key",
     "model": "你的模型名",
     "base_url": "https://你的端点/v1/"
 }
 ```
 
-只需改这四个配置项即可。`api_provider` 除了控制 UI 标签外，还会自动禁用 Anthropic 专有功能（网页搜索、文件编辑工具、缓存控制）。其他功能完全一致。
+只需改这三个配置项即可。插件会自动对比 `base_url` 与 Anthropic 默认地址来检测第三方 API，并自动禁用 Anthropic 专有功能（网页搜索、文件编辑工具、缓存控制、anthropic-version 请求头）。UI 标签始终显示 "Claude"。
 
 ### 3. 开始对话
 
@@ -78,9 +76,8 @@
 
 | 设置项 | 默认值 | 说明 |
 |--------|--------|------|
-| `api_provider` | `"anthropic"` | `"anthropic"` 为 Claude，或自定义名称用于第三方 API |
 | `api_key` | `""` | API Key（字符串或 `{keys: [...], active_key: N}`） |
-| `base_url` | `"https://api.anthropic.com/v1/"` | API 端点地址 |
+| `base_url` | `"https://api.anthropic.com/v1/"` | API 端点地址。修改后自动禁用 Anthropic 专有功能 |
 | `model` | `"claude-sonnet-4-5"` | 模型名称 |
 | `max_tokens` | `8192` | 每次回复最大 token 数 |
 | `temperature` | `"1.0"` | 温度参数（0.0–1.0） |

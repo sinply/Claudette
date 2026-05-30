@@ -1,18 +1,10 @@
-"""Provider detection — controls UI labels and Anthropic-specific features."""
+"""Provider detection — controls Anthropic-specific features via base_url."""
+
+from ..constants import DEFAULT_BASE_URL
 
 
-def get_provider(settings):
-    """Return the active API provider: 'anthropic' or other value."""
-    return settings.get("api_provider", "anthropic")
-
-
-def is_anthropic(settings):
-    """Return True if the provider is the native Anthropic API."""
-    return get_provider(settings) == "anthropic"
-
-
-def provider_label(provider):
-    """Human-readable provider name for UI."""
-    if provider == "anthropic":
-        return "Claude"
-    return provider.capitalize() if provider else "Claude"
+def is_anthropic(base_url):
+    """Return True if base_url points to the native Anthropic API."""
+    if not base_url:
+        return True
+    return base_url.rstrip("/") == DEFAULT_BASE_URL.rstrip("/")

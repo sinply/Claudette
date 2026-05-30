@@ -2,7 +2,6 @@ import sublime
 import sublime_plugin
 
 from ..api.api import ClaudetteClaudeAPI
-from ..api.provider import provider_label
 from ..constants import SETTINGS_FILE
 
 
@@ -21,7 +20,6 @@ class ClaudetteSelectModelPanelCommand(sublime_plugin.WindowCommand):
         try:
             api = ClaudetteClaudeAPI()
             settings = sublime.load_settings(SETTINGS_FILE)
-            label = provider_label(api.provider)
             current_model = settings.get("model")
             models = api.fetch_models()
 
@@ -39,8 +37,8 @@ class ClaudetteSelectModelPanelCommand(sublime_plugin.WindowCommand):
                         sublime.save_settings(SETTINGS_FILE)
 
                         sublime.status_message(
-                            "{0} model switched to {1}".format(
-                                label, str(selected_model)
+                            "Claude model switched to {0}".format(
+                                str(selected_model)
                             )
                         )
                     except Exception as e:

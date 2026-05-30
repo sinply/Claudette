@@ -6,7 +6,6 @@ import sublime_plugin
 
 from ..api.api import ClaudetteClaudeAPI
 from ..api.handler import ClaudetteStreamingResponseHandler
-from ..api.provider import provider_label
 from ..constants import PLUGIN_NAME, SETTINGS_FILE, TOOL_STATUS_MESSAGES
 from ..utils import (
     claudette_chat_status_message,
@@ -83,14 +82,11 @@ class ClaudetteAskQuestionCommand(sublime_plugin.WindowCommand):
 
         if not api_key:
             window = self.get_window()
-            label = provider_label(api.provider)
             claudette_chat_status_message(
                 window,
                 (
-                    "Please add your {0} API key via the "
-                    "`Settings > Package Settings > Claudette` menu.".format(
-                        label
-                    )
+                    "Please add your Claude API key via the "
+                    "`Settings > Package Settings > Claudette` menu."
                 ),
                 "⚠️",
             )
@@ -136,10 +132,8 @@ class ClaudetteAskQuestionCommand(sublime_plugin.WindowCommand):
                 else ""
             )
 
-            api_tmp = ClaudetteClaudeAPI()
-            prompt_label = provider_label(api_tmp.provider)
             view = window.show_input_panel(
-                "Ask {0}:".format(prompt_label),
+                "Ask Claude:",
                 "",
                 lambda q: self.handle_input(selected_text, q),
                 None,
@@ -189,13 +183,12 @@ class ClaudetteAskQuestionCommand(sublime_plugin.WindowCommand):
             # Init API instance for provider-specific labels and request
             api = ClaudetteClaudeAPI()
             use_text_editor = api.settings.get("text_editor_tool", False)
-            if use_text_editor and api.provider != "anthropic":
+            if use_text_editor and not api.is_anthropic:
                 use_text_editor = False
 
             # Add response heading before streaming begins
-            resp_label = provider_label(api.provider)
             self.chat_view.append_text(
-                "# {0}'s Response\n\n".format(resp_label)
+                "# Claude's Response\n\n"
             )
 
             if self.chat_view.get_size() > 0:
@@ -333,10 +326,8 @@ class ClaudetteAskNewQuestionCommand(sublime_plugin.WindowCommand):
                 )
                 ask_command.handle_input(code, q)
 
-            api_tmp2 = ClaudetteClaudeAPI()
-            new_label = provider_label(api_tmp2.provider)
             view = window.show_input_panel(
-                "Ask {0} (New Chat):".format(new_label),
+                "Ask Claude (New Chat):",
                 "",
                 input_done,
                 None,

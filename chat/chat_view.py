@@ -133,10 +133,7 @@ class ClaudetteChatView:
         rulers = chat_settings.get("rulers", False)
         set_scratch = chat_settings.get("set_scratch", True)
 
-        provider = self.settings.get("api_provider", "anthropic")
-        from ..api.provider import provider_label
-        tab_name = "{0} Chat".format(provider_label(provider))
-        view.set_name(tab_name)
+        view.set_name("Claude Chat")
         view.set_scratch(set_scratch)
         view.assign_syntax("Packages/Markdown/Markdown.sublime-syntax")
         view.set_read_only(True)

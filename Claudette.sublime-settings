@@ -1,10 +1,4 @@
 {
-	// API provider. "anthropic" for Claude (default), or any custom name
-	// (e.g. "deepseek") for a third-party Anthropic-compatible API.
-	// When using a non-anthropic provider, set base_url, model, and api_key
-	// accordingly. Custom providers skip anthropic-version header and
-	// Anthropic-only features (web_search, text_editor_tool, cache_control).
-	"api_provider": "anthropic",
 	// API key configuration. You can define a single key or multiple keys.
 	//
 	// Example for a single key:
