@@ -4,6 +4,7 @@ import os
 import sublime
 import sublime_plugin
 
+from ..api.provider import provider_label
 from ..constants import PLUGIN_NAME
 from ..utils import claudette_chat_status_message
 from .ask_question import ClaudetteAskQuestionCommand
@@ -157,8 +158,11 @@ class ClaudetteImportChatHistoryCommand(sublime_plugin.WindowCommand):
                     chat_view.append_text(content, scroll_to_end=False)
                     first_message = False
                 elif message["role"] == "assistant":
+                    settings = sublime.load_settings("Claudette.sublime-settings")
+                    provider = settings.get("api_provider", "anthropic")
+                    label = provider_label(provider)
                     chat_view.append_text(
-                        f"# Claude's Response\n\n{message['content']}\n",
+                        f"# {label}'s Response\n\n{message['content']}\n",
                         scroll_to_end=False,
                     )
 

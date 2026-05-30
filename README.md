@@ -1,19 +1,57 @@
-# Claudette – Claude AI Assistant for Sublime Text
+# Claudette – AI Assistant for Sublime Text
 
-![Claudette Chat View](https://raw.githubusercontent.com/barryceelen/Claudette/main/screenshot.png "Ask Claude")
+![Claudette Chat View](https://raw.githubusercontent.com/barryceelen/Claudette/main/screenshot.png "Ask AI")
 
-A [Sublime Text](http://www.sublimetext.com) package that integrates the Anthropic Claude AI API into your editor.
+A [Sublime Text](http://www.sublimetext.com) package that integrates AI chat into your editor. Supports both the **Anthropic Claude API** and the **DeepSeek API** (via Anthropic-compatible endpoint).
 
-Type "Ask Question" in the command palette or find the *Claudette > Ask Question* item in the *Tools* menu to ask a question. Any selected text in the current file will be sent along to the Anthropic Claude API. Note that a Claude API key is required.
+Type "Ask Question" in the command palette or find the *Claudette > Ask Question* item in the *Tools* menu to ask a question. Any selected text in the current file will be sent along to the AI. Note that an API key is required.
 
 ## Features
 
-- Chat with Claude in multiple chat windows at the same time
+- Chat with AI in multiple chat windows at the same time
 - Automatically include selected text as context for your questions
 - Include one or more files in the chat context
-- Choose between different Claude [models](https://docs.anthropic.com/en/docs/about-claude/models)
-- Configure custom [system prompts](https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/system-prompts) to customize Claude's behavior
+- Choose between different AI models from Anthropic or DeepSeek
+- Configure custom system prompts to customize AI behavior
 - Chat History: Export and import conversations as JSON files
+- Multi-provider support: switch between Anthropic Claude and DeepSeek
+
+## Quick Start
+
+### Step 1: Get an API Key
+
+- **DeepSeek**: [platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys)
+- **Claude**: [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys)
+
+### Step 2: Configure
+
+*Preferences > Package Settings > Claudette > Settings*
+
+**DeepSeek:**
+```jsonc
+{
+    "api_provider": "deepseek",
+    "deepseek": {
+        "api_key": "sk-your-key-here",
+        "model": "deepseek-chat"
+    }
+}
+```
+
+**Claude (default):**
+```jsonc
+{
+    "api_key": "sk-ant-your-key-here"
+}
+```
+
+### Step 3: Ask a Question
+
+`Ctrl+Shift+P` → `Claudette: Ask Question` → 输入问题 → 回车
+
+输入框会显示 **"Ask DeepSeek:"**（或 **"Ask Claude:"**），标签页会显示 **"DeepSeek Chat"**（或 **"Claude Chat"**）。
+
+> **注意：** Text Editor Tool（文件编辑）和 Web Search（网页搜索）是 Claude 专有功能，使用 DeepSeek 时自动禁用。
 
 ## Commands
 
@@ -34,7 +72,7 @@ Clear the chat history to reduce token usage while keeping previous messages vis
 
 - **Export Chat History**  
 *claudette\_export\_chat\_history*  
-Save any Claude chat conversation. Run this command to export the most recently active chat view in the current window to a JSON file.
+Save any chat conversation. Run this command to export the most recently active chat view in the current window to a JSON file.
 
 - **Import Chat History**  
 *claudette\_import\_chat\_history*  
@@ -70,21 +108,21 @@ Remove all included files from the chat context.
 
 - **Switch Model**  
 *claudette\_select\_model\_panel*  
-Claudette chat is powered by Claude 3.5 Sonnet by default, but you can switch between all available Anthropic models.
+Switch between available models. Fetches models from the active provider's API. Claude Sonnet 4.5 is the default for Anthropic; DeepSeek-Chat is the default for DeepSeek.
 
 - **Switch System Prompt**  
 *claudette\_select\_system\_message\_panel*  
-Improve Claude's performance by using a [system prompt](https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/system-prompts). You can create and manage multiple prompts.
+Improve AI performance by using a system prompt. You can create and manage multiple prompts.
 
 - **Switch API Key**
 *claudette\_select\_api\_key\_panel*
-Claudette allows using multiple API keys.
+Claudette supports multiple API keys. Configure named keys in settings and switch between them at runtime.
 
 ## Keyboard shortcuts
 
 The Claudette package does not add [key bindings](https://www.sublimetext.com/docs/key_bindings.html) out of the box. You can add your own keyboard shortcuts via the *Settings > Keybindings* settings menu. The following example adds a keyboard shortcut that opens the "Ask Question" panel.
 
-For OSX:
+For macOS:
 
 ```
 [
@@ -106,14 +144,68 @@ For Linux and Windows:
 ]
 ```
 
+## Settings Reference
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `api_provider` | `"anthropic"` | API provider: `"anthropic"` or `"deepseek"` |
+| `api_key` | `""` | Anthropic API key (string or `{keys: [...], active_key: N}`) |
+| `base_url` | `"https://api.anthropic.com/v1/"` | Anthropic API base URL |
+| `model` | `"claude-sonnet-4-5"` | Claude model name |
+| `deepseek.api_key` | `""` | DeepSeek API key |
+| `deepseek.base_url` | `"https://api.deepseek.com/v1/"` | DeepSeek API base URL |
+| `deepseek.model` | `"deepseek-chat"` | DeepSeek model name |
+| `deepseek.pricing` | `{...}` | DeepSeek pricing per 1M tokens |
+| `max_tokens` | `8192` | Maximum output tokens per response |
+| `temperature` | `"1.0"` | Model temperature (0.0–1.0) |
+| `system_messages` | `[...]` | List of system prompts |
+| `pricing` | `{...}` | Anthropic pricing per 1M tokens |
+| `web_search` | `false` | Enable web search (Anthropic only) |
+| `text_editor_tool` | `false` | Enable file editing tool (Anthropic only) |
+
 ## Installation
 
-1. Install [Package Control](https://packagecontrol.io/installation) if you haven't already
-2. Open the Command Palette (<kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>P</kbd> on Mac, <kbd>Ctrl</kbd>+<kbd>⇧</kbd>+<kbd>P</kbd> on Windows/Linux)
-3. Type "Package Control: Install Package" and press Enter
-4. Type "Claudette" and press Enter to install
-5. Get an API key from [Anthropic](https://console.anthropic.com/)
-6. Configure API key in *Preferences > Package Settings > Claudette > Settings*
+### 方法一：Package Control
+
+1. 安装 [Package Control](https://packagecontrol.io/installation)
+2. `Ctrl+Shift+P` → `Package Control: Install Package` → 输入 `Claudette` → 安装
+
+### 方法二：手动安装 .sublime-package 文件
+
+1. `Win+R` → 输入 `%APPDATA%\Sublime Text\Installed Packages` → 回车
+2. 把 `Claudette.sublime-package` 复制进去
+3. 重启 Sublime Text
+
+### 方法三：开发模式（Packages 目录）
+
+把项目文件夹直接放到 `%APPDATA%\Sublime Text\Packages\Claudette\`，适合二次开发调试。
+
+### Building .sublime-package
+
+```bash
+# .sublime-package 就是一个 zip 文件
+python -c "
+import zipfile, os
+src = 'Claudette'
+dst = 'Claudette.sublime-package'
+exclude = {'.git', '.gitattributes', '.gitignore', '.python-version',
+           '.repomixignore', 'pyproject.toml', 'pyrightconfig.json',
+           'repomix.config.json', '__pycache__'}
+with zipfile.ZipFile(dst, 'w', zipfile.ZIP_DEFLATED) as zf:
+    for root, dirs, files in os.walk(src):
+        dirs[:] = [d for d in dirs if d not in exclude]
+        for f in files:
+            if not f.endswith('.pyc'):
+                full = os.path.join(root, f)
+                zf.write(full, os.path.relpath(full, src))
+"
+```
+
+### 配置 API Key
+
+1. 获取 API Key：[DeepSeek](https://platform.deepseek.com/api_keys) 或 [Anthropic](https://console.anthropic.com/)
+2. 菜单栏 `Preferences > Package Settings > Claudette > Settings`
+3. 配置 provider 和对应的 api_key（参考上方 Quick Start）
 
 ## What's new
 
@@ -121,7 +213,10 @@ For Linux and Windows:
 
 ## Privacy & legal
 
-Everything that you share with the Anthropic Claude API, for example by including it in a chat, will be sent to Anthropic's servers. For information about Anthropic's privacy practices, data processing, and legal compliance, please visit the Anthropic [Privacy & Legal documentation](https://support.anthropic.com/en/collections/4078534-privacy-legal).
+Everything that you share with the AI API, for example by including it in a chat, will be sent to the provider's servers.
+
+- **Anthropic Claude:** [Privacy & Legal documentation](https://support.anthropic.com/en/collections/4078534-privacy-legal)
+- **DeepSeek:** [Privacy Policy](https://platform.deepseek.com/privacy)
 
 ## Credits
 

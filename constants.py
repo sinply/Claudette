@@ -3,6 +3,8 @@
 ANTHROPIC_VERSION = "2023-06-01"
 DEFAULT_MODEL = "claude-sonnet-4-5"
 DEFAULT_BASE_URL = "https://api.anthropic.com/v1/"
+DEFAULT_DEEPSEEK_MODEL = "deepseek-chat"
+DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1/"
 MAX_TOKENS = 8192
 PLUGIN_NAME = "Claudette"
 SETTINGS_FILE = "Claudette.sublime-settings"

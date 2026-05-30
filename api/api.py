@@ -31,6 +31,7 @@ from .errors import (
     is_model_not_found_error,
     parse_api_error,
 )
+from .provider import get_effective_settings, get_provider, provider_label
 from .session_stats import format_status_message, update_session_stats
 from .tools import (
     build_text_editor_tool_def,
@@ -49,19 +50,23 @@ class CancelledException(Exception):
 class ClaudetteClaudeAPI:
     def __init__(self):
         self.settings = sublime.load_settings(SETTINGS_FILE)
-        self.api_key = claudette_get_api_key_value()
-        self.base_url = self.settings.get("base_url", DEFAULT_BASE_URL)
+        self.provider = get_provider(self.settings)
+        (
+            _,
+            self.base_url,
+            self.model,
+            self.api_key,
+            self.pricing,
+        ) = get_effective_settings(self.settings)
         try:
             self.max_tokens = int(self.settings.get("max_tokens", MAX_TOKENS))
         except (TypeError, ValueError):
             self.max_tokens = MAX_TOKENS
-        self.model = self.settings.get("model", DEFAULT_MODEL)
         self.temperature = self.settings.get("temperature", "1.0")
         self.session_cost = 0.0
         self.session_input_tokens = 0
         self.session_output_tokens = 0
         self.spinner = ClaudetteSpinner()
-        self.pricing = self.settings.get("pricing")
         self.verify_ssl = self.settings.get("verify_ssl", DEFAULT_VERIFY_SSL)
 
     def _get_ssl_context(self):
@@ -193,7 +198,8 @@ class ClaudetteClaudeAPI:
 
                 if combined_content != "<reference_files>\n</reference_files>":
                     system_message = {"type": "text", "text": combined_content}
-                    system_message["cache_control"] = {"type": "ephemeral"}
+                    if self.provider == "anthropic":
+                        system_message["cache_control"] = {"type": "ephemeral"}
                     system_messages.append(system_message)
 
         return system_messages
@@ -215,9 +221,10 @@ class ClaudetteClaudeAPI:
         """
         headers = {
             "x-api-key": self.api_key,
-            "anthropic-version": ANTHROPIC_VERSION,
             "content-type": "application/json",
         }
+        if self.provider == "anthropic":
+            headers["anthropic-version"] = ANTHROPIC_VERSION
         headers.update(self._get_custom_headers())
 
         data = {
@@ -308,6 +315,13 @@ class ClaudetteClaudeAPI:
             handle_error(
                 "[Error] The API key is not set. Please check your API key "
                 "configuration."
+            )
+            return
+
+        if self.provider == "deepseek":
+            handle_error(
+                "[Error] The text editor tool is only available with the "
+                "Anthropic API provider."
             )
             return
 
@@ -650,9 +664,10 @@ class ClaudetteClaudeAPI:
 
             headers = {
                 "x-api-key": self.api_key,
-                "anthropic-version": ANTHROPIC_VERSION,
                 "content-type": "application/json",
             }
+            if self.provider == "anthropic":
+                headers["anthropic-version"] = ANTHROPIC_VERSION
             headers.update(self._get_custom_headers())
 
             filtered_messages = [
@@ -671,7 +686,7 @@ class ClaudetteClaudeAPI:
             }
 
             web_search_tool = build_web_search_tool_def(self.settings)
-            if web_search_tool:
+            if web_search_tool and self.provider == "anthropic":
                 data["tools"] = [web_search_tool]
 
             req = urllib.request.Request(
@@ -1082,8 +1097,9 @@ class ClaudetteClaudeAPI:
             sublime.status_message("Fetching models")
             headers = {
                 "x-api-key": self.api_key,
-                "anthropic-version": ANTHROPIC_VERSION,
             }
+            if self.provider == "anthropic":
+                headers["anthropic-version"] = ANTHROPIC_VERSION
             headers.update(self._get_custom_headers())
 
             req = urllib.request.Request(
@@ -1100,29 +1116,32 @@ class ClaudetteClaudeAPI:
                 return model_ids
 
         except urllib.error.HTTPError as e:
+            api_label = provider_label(self.provider)
             if e.code == 401:
-                print("Claude API: {0}".format(str(e)))
+                print("{0} API: {1}".format(api_label, str(e)))
                 sublime.error_message(
                     "Authentication invalid when fetching the available "
-                    "models from the Claude API."
+                    "models from the {0} API.".format(api_label)
                 )
             else:
-                print("Claude API: {0}".format(str(e)))
+                print("{0} API: {1}".format(api_label, str(e)))
                 sublime.error_message(
                     "An error occurred fetching the available models from "
-                    "the Claude API."
+                    "the {0} API.".format(api_label)
                 )
         except urllib.error.URLError as e:
-            print("Claude API: {0}".format(str(e)))
+            api_label = provider_label(self.provider)
+            print("{0} API: {1}".format(api_label, str(e)))
             sublime.error_message(
                 "An error occurred fetching the available models from the "
-                "Claude API."
+                "{0} API.".format(api_label)
             )
         except Exception as e:
-            print("Claude API: {0}".format(str(e)))
+            api_label = provider_label(self.provider)
+            print("{0} API: {1}".format(api_label, str(e)))
             sublime.error_message(
                 "An error occurred fetching the available models from the "
-                "Claude API."
+                "{0} API.".format(api_label)
             )
         finally:
             sublime.status_message("")

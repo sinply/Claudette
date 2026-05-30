@@ -11,14 +11,21 @@ class ClaudetteSelectApiKeyPanelCommand(sublime_plugin.WindowCommand):
     Shows a quick panel of API keys so the user can switch the active key.
     """
 
+    def _get_api_key_config(self, settings):
+        """Return (api_key_config, setting_key_path) for the active provider."""
+        provider = settings.get("api_provider", "anthropic")
+        if provider == "deepseek":
+            ds = settings.get("deepseek", {})
+            return ds.get("api_key", ""), "deepseek"
+        return settings.get("api_key"), "api_key"
+
     def is_visible(self):
         return True
 
     def is_enabled(self):
         settings = sublime.load_settings(SETTINGS_FILE)
-        api_key = settings.get("api_key")
+        api_key, _ = self._get_api_key_config(settings)
 
-        # Require dict api_key with at least two named keys
         return (
             isinstance(api_key, dict)
             and api_key.get("keys")
@@ -29,11 +36,10 @@ class ClaudetteSelectApiKeyPanelCommand(sublime_plugin.WindowCommand):
     def run(self):
         try:
             settings = sublime.load_settings(SETTINGS_FILE)
-            api_key = settings.get("api_key")
+            api_key, key_path = self._get_api_key_config(settings)
             panel_items = []
 
             if isinstance(api_key, str) and api_key.strip():
-                # We have a single key
                 panel_items.append(["Default"])
             elif (
                 isinstance(api_key, dict)
@@ -47,7 +53,6 @@ class ClaudetteSelectApiKeyPanelCommand(sublime_plugin.WindowCommand):
                         )
                         panel_items.append([name])
 
-            # Add the appropriate settings item based on whether api_key exists
             settings_item = (
                 "→ Manage API keys" if panel_items else "＋ Add new API key"
             )
@@ -58,7 +63,6 @@ class ClaudetteSelectApiKeyPanelCommand(sublime_plugin.WindowCommand):
                     return
 
                 if index == len(panel_items) - 1:
-                    # Open package settings if the last item was selected
                     self.window.run_command(
                         "edit_settings",
                         {
@@ -71,19 +75,22 @@ class ClaudetteSelectApiKeyPanelCommand(sublime_plugin.WindowCommand):
                     )
                 else:
                     if isinstance(api_key, str):
-                        # Nothing needed for a single API key.
                         pass
                     elif isinstance(api_key, dict) and api_key.get("keys"):
                         updated_api_key = api_key.copy()
                         updated_api_key["active_key"] = index
-                        settings.set("api_key", updated_api_key)
+                        if key_path == "deepseek":
+                            ds = settings.get("deepseek", {})
+                            ds["api_key"] = updated_api_key
+                            settings.set("deepseek", ds)
+                        else:
+                            settings.set("api_key", updated_api_key)
                         sublime.save_settings(SETTINGS_FILE)
 
                     sublime.status_message(
                         f"Switched to API key: {panel_items[index][0]}"
                     )
 
-            # Get the current selection index
             selection_index = 0
             if isinstance(api_key, dict) and api_key.get("keys"):
                 current_index = api_key.get("active_key", 0)

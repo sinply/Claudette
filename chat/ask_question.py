@@ -6,6 +6,7 @@ import sublime_plugin
 
 from ..api.api import ClaudetteClaudeAPI
 from ..api.handler import ClaudetteStreamingResponseHandler
+from ..api.provider import provider_label
 from ..constants import PLUGIN_NAME, SETTINGS_FILE, TOOL_STATUS_MESSAGES
 from ..utils import (
     claudette_chat_status_message,
@@ -77,15 +78,19 @@ class ClaudetteAskQuestionCommand(sublime_plugin.WindowCommand):
         if not self.create_chat_panel():
             return
 
-        api_key = claudette_get_api_key_value()
+        api = ClaudetteClaudeAPI()
+        api_key = api.api_key
 
         if not api_key:
             window = self.get_window()
+            label = provider_label(api.provider)
             claudette_chat_status_message(
                 window,
                 (
-                    "Please add your Claude API key via the "
-                    "`Settings > Package Settings > Claudette` menu."
+                    "Please add your {0} API key via the "
+                    "`Settings > Package Settings > Claudette` menu.".format(
+                        label
+                    )
                 ),
                 "⚠️",
             )
@@ -131,8 +136,10 @@ class ClaudetteAskQuestionCommand(sublime_plugin.WindowCommand):
                 else ""
             )
 
+            api_tmp = ClaudetteClaudeAPI()
+            prompt_label = provider_label(api_tmp.provider)
             view = window.show_input_panel(
-                "Ask Claude:",
+                "Ask {0}:".format(prompt_label),
                 "",
                 lambda q: self.handle_input(selected_text, q),
                 None,
@@ -179,8 +186,17 @@ class ClaudetteAskQuestionCommand(sublime_plugin.WindowCommand):
 
             self.chat_view.append_text(message)
 
+            # Init API instance for provider-specific labels and request
+            api = ClaudetteClaudeAPI()
+            use_text_editor = api.settings.get("text_editor_tool", False)
+            if use_text_editor and api.provider == "deepseek":
+                use_text_editor = False
+
             # Add response heading before streaming begins
-            self.chat_view.append_text("# Claude's Response\n\n")
+            resp_label = provider_label(api.provider)
+            self.chat_view.append_text(
+                "# {0}'s Response\n\n".format(resp_label)
+            )
 
             if self.chat_view.get_size() > 0:
                 self.chat_view.focus()
@@ -223,9 +239,6 @@ class ClaudetteAskQuestionCommand(sublime_plugin.WindowCommand):
                 scroll_step(0)
 
             sublime.set_timeout(smooth_scroll_to_question, 50)
-
-            api = ClaudetteClaudeAPI()
-            use_text_editor = api.settings.get("text_editor_tool", False)
 
             message_start = self.chat_view.view.size()
 
@@ -287,7 +300,7 @@ class ClaudetteAskQuestionCommand(sublime_plugin.WindowCommand):
             thread.start()
 
         except Exception as e:
-            print(f"{PLUGIN_NAME} Error sending to Claude: {str(e)}")
+            print(f"{PLUGIN_NAME} Error sending to API: {str(e)}")
             sublime.error_message(
                 f"{PLUGIN_NAME} Error: Could not send message"
             )
@@ -320,8 +333,10 @@ class ClaudetteAskNewQuestionCommand(sublime_plugin.WindowCommand):
                 )
                 ask_command.handle_input(code, q)
 
+            api_tmp2 = ClaudetteClaudeAPI()
+            new_label = provider_label(api_tmp2.provider)
             view = window.show_input_panel(
-                "Ask Claude (New Chat):",
+                "Ask {0} (New Chat):".format(new_label),
                 "",
                 input_done,
                 None,

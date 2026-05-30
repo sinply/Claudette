@@ -2,14 +2,15 @@ import sublime
 import sublime_plugin
 
 from ..api.api import ClaudetteClaudeAPI
+from ..api.provider import provider_label
 from ..constants import SETTINGS_FILE
 
 
 class ClaudetteSelectModelPanelCommand(sublime_plugin.WindowCommand):
     """
-    A command to switch between different Claude AI models.
+    A command to switch between different AI models.
 
-    This command shows a quick panel with available Claude models
+    This command shows a quick panel with available models
     and allows the user to select and switch to a different model.
     """
 
@@ -20,7 +21,15 @@ class ClaudetteSelectModelPanelCommand(sublime_plugin.WindowCommand):
         try:
             api = ClaudetteClaudeAPI()
             settings = sublime.load_settings(SETTINGS_FILE)
-            current_model = settings.get("model")
+            provider = api.provider
+            label = provider_label(provider)
+
+            if provider == "deepseek":
+                ds = settings.get("deepseek", {})
+                current_model = ds.get("model", "deepseek-chat")
+            else:
+                current_model = settings.get("model")
+
             models = api.fetch_models()
 
             if current_model in models:
@@ -33,30 +42,19 @@ class ClaudetteSelectModelPanelCommand(sublime_plugin.WindowCommand):
                 if index != -1:
                     try:
                         selected_model = models[index]
-                        settings.set("model", selected_model)
-                        # Save settings to persist the change
-                        sublime.save_settings(SETTINGS_FILE)
-                        # Verify the setting was saved
-                        saved_model = settings.get("model")
-                        if saved_model == selected_model:
-                            sublime.status_message(
-                                "Claude model switched to {0}".format(
-                                    str(selected_model)
-                                )
-                            )
+                        if provider == "deepseek":
+                            ds = settings.get("deepseek", {})
+                            ds["model"] = selected_model
+                            settings.set("deepseek", ds)
                         else:
-                            print(
-                                "Warning: Model setting may not have saved "
-                                "correctly. Expected: {0}, Got: {1}".format(
-                                    selected_model, saved_model
-                                )
+                            settings.set("model", selected_model)
+                        sublime.save_settings(SETTINGS_FILE)
+
+                        sublime.status_message(
+                            "{0} model switched to {1}".format(
+                                label, str(selected_model)
                             )
-                            sublime.status_message(
-                                "Claude model switched to {0} "
-                                "(please verify settings were saved)".format(
-                                    str(selected_model)
-                                )
-                            )
+                        )
                     except Exception as e:
                         print(f"Error saving model setting: {str(e)}")
                         sublime.error_message(
