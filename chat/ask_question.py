@@ -71,6 +71,7 @@ class ClaudetteAskQuestionCommand(sublime_plugin.WindowCommand):
             return None
 
     def handle_input(self, code, question):
+        print("[Claudette DEBUG] handle_input called, question=", repr(question[:50] if question else None))
         if not question or question.strip() == "":
             return None
 
@@ -107,6 +108,7 @@ class ClaudetteAskQuestionCommand(sublime_plugin.WindowCommand):
         self.send_to_claude(code, question.strip())
 
     def run(self, code=None, question=None):
+        print("[Claudette DEBUG] AskQuestionCommand.run() called")
         try:
             self.load_settings()
 
@@ -132,13 +134,21 @@ class ClaudetteAskQuestionCommand(sublime_plugin.WindowCommand):
                 else ""
             )
 
-            view = window.show_input_panel(
-                "Ask Claude:",
-                "",
-                lambda q: self.handle_input(selected_text, q),
-                None,
-                None,
-            )
+            def on_done_callback(q):
+                print("[Claudette DEBUG] on_done_callback triggered, q=", repr(q[:80]))
+                self.handle_input(selected_text, q)
+
+            def show_panel():
+                v = window.show_input_panel(
+                    "Ask Claude:",
+                    "",
+                    on_done_callback,
+                    None,
+                    None,
+                )
+                print("[Claudette DEBUG] input panel created, view=", v)
+
+            sublime.set_timeout(show_panel, 10)
 
             if not view:
                 print(f"{PLUGIN_NAME} Error: Could not create input panel")
@@ -154,8 +164,10 @@ class ClaudetteAskQuestionCommand(sublime_plugin.WindowCommand):
             )
 
     def send_to_claude(self, code, question):
+        print("[Claudette DEBUG] send_to_claude called, question=", repr(question[:80]))
         try:
             if not self.chat_view:
+                print("[Claudette DEBUG] no chat_view, returning")
                 return
 
             message = "\n\n---\n\n" if self.chat_view.get_size() > 0 else ""
@@ -317,6 +329,7 @@ class ClaudetteAskNewQuestionCommand(sublime_plugin.WindowCommand):
                 return
 
             def input_done(q):
+                print("[Claudette DEBUG] input_done triggered, q=", repr(q[:80]))
                 active = window.active_view()
                 sel = active.sel() if active else None
                 code = (
@@ -326,20 +339,21 @@ class ClaudetteAskNewQuestionCommand(sublime_plugin.WindowCommand):
                 )
                 ask_command.handle_input(code, q)
 
-            view = window.show_input_panel(
-                "Ask Claude (New Chat):",
-                "",
-                input_done,
-                None,
-                None,
-            )
-
-            if not view:
-                print(f"{PLUGIN_NAME} Error: Could not create input panel")
-                sublime.error_message(
-                    f"{PLUGIN_NAME} Error: Could not create input panel"
+            def show_panel():
+                v = window.show_input_panel(
+                    "Ask Claude (New Chat):",
+                    "",
+                    input_done,
+                    None,
+                    None,
                 )
-                return
+                if not v:
+                    print(f"{PLUGIN_NAME} Error: Could not create input panel")
+                    sublime.error_message(
+                        f"{PLUGIN_NAME} Error: Could not create input panel"
+                    )
+
+            sublime.set_timeout(show_panel, 10)
 
         except Exception as e:
             print(f"{PLUGIN_NAME} Error in run command: {str(e)}")
