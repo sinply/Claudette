@@ -134,7 +134,8 @@ class ClaudetteChatView:
         set_scratch = chat_settings.get("set_scratch", True)
 
         provider = self.settings.get("api_provider", "anthropic")
-        tab_name = "DeepSeek Chat" if provider == "deepseek" else "Claude Chat"
+        from ..api.provider import provider_label
+        tab_name = "{0} Chat".format(provider_label(provider))
         view.set_name(tab_name)
         view.set_scratch(set_scratch)
         view.assign_syntax("Packages/Markdown/Markdown.sublime-syntax")

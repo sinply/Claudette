@@ -31,7 +31,7 @@ from .errors import (
     is_model_not_found_error,
     parse_api_error,
 )
-from .provider import get_effective_settings, get_provider, provider_label
+from .provider import get_provider, provider_label
 from .session_stats import format_status_message, update_session_stats
 from .tools import (
     build_text_editor_tool_def,
@@ -51,22 +51,19 @@ class ClaudetteClaudeAPI:
     def __init__(self):
         self.settings = sublime.load_settings(SETTINGS_FILE)
         self.provider = get_provider(self.settings)
-        (
-            _,
-            self.base_url,
-            self.model,
-            self.api_key,
-            self.pricing,
-        ) = get_effective_settings(self.settings)
+        self.api_key = claudette_get_api_key_value()
+        self.base_url = self.settings.get("base_url", DEFAULT_BASE_URL)
         try:
             self.max_tokens = int(self.settings.get("max_tokens", MAX_TOKENS))
         except (TypeError, ValueError):
             self.max_tokens = MAX_TOKENS
+        self.model = self.settings.get("model", DEFAULT_MODEL)
         self.temperature = self.settings.get("temperature", "1.0")
         self.session_cost = 0.0
         self.session_input_tokens = 0
         self.session_output_tokens = 0
         self.spinner = ClaudetteSpinner()
+        self.pricing = self.settings.get("pricing")
         self.verify_ssl = self.settings.get("verify_ssl", DEFAULT_VERIFY_SSL)
 
     def _get_ssl_context(self):
@@ -318,10 +315,10 @@ class ClaudetteClaudeAPI:
             )
             return
 
-        if self.provider == "deepseek":
+        if self.provider != "anthropic":
             handle_error(
-                "[Error] The text editor tool is only available with the "
-                "Anthropic API provider."
+                "[Error] The text editor tool is only available when using "
+                "the Anthropic API."
             )
             return
 

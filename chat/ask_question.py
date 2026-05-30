@@ -189,7 +189,7 @@ class ClaudetteAskQuestionCommand(sublime_plugin.WindowCommand):
             # Init API instance for provider-specific labels and request
             api = ClaudetteClaudeAPI()
             use_text_editor = api.settings.get("text_editor_tool", False)
-            if use_text_editor and api.provider == "deepseek":
+            if use_text_editor and api.provider != "anthropic":
                 use_text_editor = False
 
             # Add response heading before streaming begins

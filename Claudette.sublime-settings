@@ -1,5 +1,9 @@
 {
-	// Which API provider to use: "anthropic" or "deepseek"
+	// API provider. "anthropic" for Claude (default), or any custom name
+	// (e.g. "deepseek") for a third-party Anthropic-compatible API.
+	// When using a non-anthropic provider, set base_url, model, and api_key
+	// accordingly. Custom providers skip anthropic-version header and
+	// Anthropic-only features (web_search, text_editor_tool, cache_control).
 	"api_provider": "anthropic",
 	// API key configuration. You can define a single key or multiple keys.
 	//
@@ -26,7 +30,8 @@
 	// https://console.anthropic.com/settings/keys
 	//
 	"api_key": "",
-	// API base URL. Defaults to https://api.anthropic.com/v1/
+	// API base URL. Use the default for Anthropic, or set to a third-party
+	// Anthropic-compatible endpoint (e.g. https://api.deepseek.com/anthropic/).
 	"base_url": "https://api.anthropic.com/v1/",
 	// SSL certificate verification. Set to false to allow self-signed certificates
 	// (useful for custom base_url with development servers). Defaults to true.
@@ -49,7 +54,7 @@
 	// https://docs.anthropic.com/en/docs/about-claude/models#model-comparison-table
 	"model": "claude-sonnet-4-5",
 	// The system message is added when the first request is sent to the
-	// Anthropic API. If an empty system message is selected as the
+	// API. If an empty system message is selected as the
 	// default_system_message_index, no system message will be sent.
 	"system_messages": [
 		"You are a helpful AI assistant focused on programming help.",
@@ -67,6 +72,7 @@
 	// When true, Claude can view and edit files (view, str_replace, create, insert)
 	// in your project. Uses non-streaming requests until the turn ends.
 	// Paths are resolved against project folders or text_editor_tool_roots.
+	// Only available with the Anthropic API provider.
 	// https://platform.claude.com/docs/en/agents-and-tools/tool-use/text-editor-tool
 	"text_editor_tool": false,
 	// Optional: max characters when viewing a file (Claude 4 tool only). 0 = no limit.
@@ -88,7 +94,8 @@
 	//     "country": "US",
 	//     "timezone": "America/Los_Angeles"
 	// },
-	// Claude pricing per 1M tokens (as of April 2026)
+	// Pricing per 1M tokens (USD). Tier keys are matched as substrings of the
+	// model name (case-insensitive). Add entries for any model you use.
 	// https://www.anthropic.com/pricing#702702
 	"pricing": {
 		"haiku": {
@@ -108,27 +115,14 @@
 			"output": 15,
 			"cache_write": 3.75,
 			"cache_read": 0.3
-		}
-	},
-	// DeepSeek API configuration. Only used when api_provider is "deepseek".
-	// Get your API key at https://platform.deepseek.com/api_keys
-	"deepseek": {
-		// DeepSeek API key. Same format as api_key: string or {keys: [...], active_key: N}
-		"api_key": "",
-		// DeepSeek base URL
-		"base_url": "https://api.deepseek.com/anthropic/",
-		// DeepSeek model to use (e.g. "deepseek-chat", "deepseek-reasoner")
-		"model": "deepseek-chat",
-		// DeepSeek pricing per 1M tokens (USD). Add entries for models you use.
-		"pricing": {
-			"deepseek-chat": {
-				"input": 0.27,
-				"output": 1.10
-			},
-			"deepseek-reasoner": {
-				"input": 0.55,
-				"output": 2.19
-			}
+		},
+		"deepseek-chat": {
+			"input": 0.27,
+			"output": 1.10
+		},
+		"deepseek-reasoner": {
+			"input": 0.55,
+			"output": 2.19
 		}
 	},
 	"chat": {

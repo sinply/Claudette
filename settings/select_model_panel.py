@@ -21,15 +21,8 @@ class ClaudetteSelectModelPanelCommand(sublime_plugin.WindowCommand):
         try:
             api = ClaudetteClaudeAPI()
             settings = sublime.load_settings(SETTINGS_FILE)
-            provider = api.provider
-            label = provider_label(provider)
-
-            if provider == "deepseek":
-                ds = settings.get("deepseek", {})
-                current_model = ds.get("model", "deepseek-chat")
-            else:
-                current_model = settings.get("model")
-
+            label = provider_label(api.provider)
+            current_model = settings.get("model")
             models = api.fetch_models()
 
             if current_model in models:
@@ -42,12 +35,7 @@ class ClaudetteSelectModelPanelCommand(sublime_plugin.WindowCommand):
                 if index != -1:
                     try:
                         selected_model = models[index]
-                        if provider == "deepseek":
-                            ds = settings.get("deepseek", {})
-                            ds["model"] = selected_model
-                            settings.set("deepseek", ds)
-                        else:
-                            settings.set("model", selected_model)
+                        settings.set("model", selected_model)
                         sublime.save_settings(SETTINGS_FILE)
 
                         sublime.status_message(
