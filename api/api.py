@@ -53,6 +53,8 @@ class ClaudetteClaudeAPI:
         self.api_key = claudette_get_api_key_value()
         self.base_url = self.settings.get("base_url", DEFAULT_BASE_URL)
         self.is_anthropic = is_anthropic(self.base_url)
+        if not self.base_url.endswith("/"):
+            self.base_url += "/"
         try:
             self.max_tokens = int(self.settings.get("max_tokens", MAX_TOKENS))
         except (TypeError, ValueError):
