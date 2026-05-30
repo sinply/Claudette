@@ -18,19 +18,44 @@ _pending_self = None
 _pending_code = ""
 _pending_is_new = False
 _pending_callback = None
+_pending_submitted = False
 
 
 def _show_input_panel(window, cmd_instance, code, is_new):
-    """Show the input panel with a module-level callback reference."""
-    global _pending_callback
+    """Show the input panel with Enter-as-submit workaround.
+
+    On some systems (notably ST4 on Windows), pressing Enter in
+    show_input_panel inserts a newline instead of firing on_done.
+    We detect this via on_change and treat a trailing \\n as submit.
+    """
+    global _pending_callback, _pending_submitted
+
+    _pending_submitted = False
 
     def on_done(q):
-        print("[Claudette DEBUG] on_done triggered, q=", repr(q[:80]))
+        print("[Claudette DEBUG] on_done, q=", repr(q[:80]))
+        if _pending_submitted:
+            return
+        _pending_submitted = True
         cmd_instance.handle_input(code, q)
 
-    _pending_callback = on_done  # Prevent GC
+    def on_change(current_text):
+        if _pending_submitted:
+            return
+        if current_text.endswith("\n"):
+            _pending_submitted = True
+            q = current_text.rstrip("\n")
+            print("[Claudette DEBUG] Enter detected via on_change, q=", repr(q[:80]))
+            # Hide the panel by showing a no-op quick panel then dismissing
+            window.run_command("hide_panel", {"cancel": True})
+            cmd_instance.handle_input(code, q)
+
+    def on_cancel():
+        print("[Claudette DEBUG] on_cancel")
+
+    _pending_callback = (on_done, on_change, on_cancel)  # Prevent GC
     prompt = "Ask Claude (New Chat):" if is_new else "Ask Claude:"
-    v = window.show_input_panel(prompt, "", on_done, None, None)
+    v = window.show_input_panel(prompt, "", on_done, on_change, on_cancel)
     print("[Claudette DEBUG] input panel created, view=", v)
 
 
