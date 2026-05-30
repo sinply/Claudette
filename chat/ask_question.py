@@ -150,13 +150,6 @@ class ClaudetteAskQuestionCommand(sublime_plugin.WindowCommand):
 
             sublime.set_timeout(show_panel, 10)
 
-            if not view:
-                print(f"{PLUGIN_NAME} Error: Could not create input panel")
-                sublime.error_message(
-                    f"{PLUGIN_NAME} Error: Could not create input panel"
-                )
-                return
-
         except Exception as e:
             print(f"{PLUGIN_NAME} Error in run command: {str(e)}")
             sublime.error_message(
