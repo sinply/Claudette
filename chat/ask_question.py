@@ -215,6 +215,20 @@ class ClaudetteAskQuestionCommand(sublime_plugin.WindowCommand):
             if use_text_editor and not api.is_anthropic:
                 use_text_editor = False
 
+            force_search = api.settings.get("force_web_search", True)
+            enable_web_fetch = api.settings.get("enable_web_fetch", True)
+            enable_client_search = api.settings.get(
+                "enable_client_web_search", True
+            )
+            # Use the tool loop whenever a client tool is enabled, even with
+            # force_web_search on. The tool loop also calls
+            # _maybe_add_search_context (pre-search), so both work together.
+            # Only fall back to pure streaming when no client tools are wanted.
+            use_client_tools = (
+                not use_text_editor
+                and (enable_web_fetch or enable_client_search)
+            )
+
             # Add response heading before streaming begins
             self.chat_view.append_text(
                 "# Claude's Response\n\n"
@@ -302,6 +316,15 @@ class ClaudetteAskQuestionCommand(sublime_plugin.WindowCommand):
             )
             if use_text_editor:
                 target = api.run_with_text_editor_loop
+                args = (
+                    handler.append_chunk,
+                    conversation,
+                    self.chat_view,
+                    on_complete,
+                    cancellation_token,
+                )
+            elif use_client_tools:
+                target = api.run_with_client_tools_loop
                 args = (
                     handler.append_chunk,
                     conversation,

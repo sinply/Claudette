@@ -62,6 +62,89 @@ def build_web_search_tool_def(settings):
     return tool_def
 
 
+def build_web_fetch_tool_def(settings):
+    """Build client-side web fetch tool definition, or None if disabled.
+
+    This is a custom tool executed locally by the plugin — it works with
+    ALL API providers, not just Anthropic.
+
+    Args:
+        settings: Sublime Text settings object (or dict-like).
+
+    Returns:
+        dict or None: The web fetch tool definition for the API request.
+    """
+    if not settings.get("enable_web_fetch", True):
+        return None
+
+    return {
+        "name": "web_fetch",
+        "description": (
+            "Fetches content from a specified URL and processes it into "
+            "text. Use this tool when you need to read the content of a "
+            "web page, documentation, or any online resource. Returns the "
+            "extracted text content from the page."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": (
+                        "The URL to fetch content from. Can include or "
+                        "omit the https:// prefix."
+                    ),
+                }
+            },
+            "required": ["url"],
+        },
+    }
+
+
+def build_client_web_search_tool_def(settings):
+    """Build client-side web search tool definition, or None if disabled.
+
+    This is a custom tool executed locally by the plugin — it works with
+    ALL API providers, not just Anthropic. Uses DuckDuckGo or SearXNG
+    (both free, no API key required).
+
+    Use this alongside or instead of Anthropic's server-side web_search
+    tool for non-Anthropic providers.
+
+    Args:
+        settings: Sublime Text settings object (or dict-like).
+
+    Returns:
+        dict or None: The web search tool definition for the API request.
+    """
+    if not settings.get("enable_client_web_search", True):
+        return None
+
+    return {
+        "name": "client_web_search",
+        "description": (
+            "Searches the web for current information. Use this tool to "
+            "find up-to-date information, recent news, documentation, "
+            "or any information that may not be in your training data. "
+            "Returns formatted search results with titles, URLs, and "
+            "snippets."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": (
+                        "The search query. Be specific and include "
+                        "relevant keywords for best results."
+                    ),
+                }
+            },
+            "required": ["query"],
+        },
+    }
+
+
 def build_text_editor_tool_def(settings, model):
     """Build text editor tool definition, or None if disabled.
 

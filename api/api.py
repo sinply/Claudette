@@ -13,7 +13,10 @@ from ..constants import (
     ANTHROPIC_VERSION,
     DEFAULT_BASE_URL,
     DEFAULT_MODEL,
+    DEFAULT_REQUEST_TIMEOUT,
     DEFAULT_VERIFY_SSL,
+    MAX_TEMPERATURE_ANTHROPIC,
+    MAX_TEMPERATURE_OTHER,
     MAX_TOKENS,
     SETTINGS_FILE,
 )
@@ -23,6 +26,8 @@ from ..tools.text_editor import (
     resolve_path,
     run_text_editor_tool,
 )
+from ..tools.web_fetch import run_web_fetch
+from ..tools.web_search_client import run_web_search
 from ..utils import (
     claudette_chat_status_message,
     claudette_get_api_key_value,
@@ -39,7 +44,9 @@ from .errors import (
 from .provider import is_anthropic
 from .session_stats import format_status_message, update_session_stats
 from .tools import (
+    build_client_web_search_tool_def,
     build_text_editor_tool_def,
+    build_web_fetch_tool_def,
     build_web_search_tool_def,
     format_search_results,
     parse_web_search_items,
@@ -73,6 +80,16 @@ class ClaudetteClaudeAPI:
         except (TypeError, ValueError):
             self.max_tokens = MAX_TOKENS
         self.temperature = self.settings.get("temperature", "1.0")
+        try:
+            self.request_timeout = int(
+                self.settings.get(
+                    "request_timeout", DEFAULT_REQUEST_TIMEOUT
+                )
+            )
+            if self.request_timeout <= 0:
+                self.request_timeout = DEFAULT_REQUEST_TIMEOUT
+        except (TypeError, ValueError):
+            self.request_timeout = DEFAULT_REQUEST_TIMEOUT
         self.session_cost = 0.0
         self.session_input_tokens = 0
         self.session_output_tokens = 0
@@ -100,14 +117,26 @@ class ClaudetteClaudeAPI:
         return {}
 
     @staticmethod
-    def get_valid_temperature(temp):
+    def get_valid_temperature(temp, is_anthropic=True):
+        """Clamp temperature to the provider's supported range.
+
+        Anthropic caps at 1.0. Other providers (DeepSeek, etc.) allow up
+        to 2.0. Out-of-range values are clamped to the nearest bound
+        instead of silently reverting to 1.0.
+        """
         try:
             temp = float(temp)
-            if 0.0 <= temp <= 1.0:
-                return temp
-            return 1.0
         except (TypeError, ValueError):
             return 1.0
+        max_temp = (
+            MAX_TEMPERATURE_ANTHROPIC if is_anthropic
+            else MAX_TEMPERATURE_OTHER
+        )
+        if temp < 0.0:
+            return 0.0
+        if temp > max_temp:
+            return max_temp
+        return temp
 
     @staticmethod
     def _message_has_content(msg):
@@ -215,6 +244,92 @@ class ClaudetteClaudeAPI:
 
         return system_messages
 
+    def _maybe_add_search_context(self, messages, system_messages):
+        """Pre-search the web and inject results into system messages.
+
+        When force_web_search is enabled, uses the last user message as a
+        search query, fetches results, and appends them to system messages
+        so the AI always has up-to-date context.
+
+        Args:
+            messages: List of conversation messages.
+            system_messages: Current system messages list.
+
+        Returns:
+            list: System messages with search context appended (or unchanged).
+        """
+        if not self.settings.get("force_web_search", True):
+            return system_messages
+
+        question = ""
+        for m in reversed(messages):
+            if m.get("role") == "user":
+                content = m.get("content", "")
+                if isinstance(content, str):
+                    question = content
+                elif isinstance(content, list):
+                    for block in content:
+                        if (
+                            isinstance(block, dict)
+                            and block.get("type") == "text"
+                        ):
+                            question += block.get("text", "") + " "
+                    question = question.strip()
+                break
+
+        if not question:
+            return system_messages
+
+        self.spinner.set_message("Searching the web...")
+        sublime.set_timeout(
+            lambda: sublime.status_message("Claudette: Searching the web..."),
+            0,
+        )
+
+        backend = self.settings.get("web_search_backend", "duckduckgo")
+        instance = self.settings.get("searxng_instance_url", "")
+
+        results = run_web_search(
+            question,
+            backend=backend,
+            searxng_instance=instance,
+            verify_ssl=self.verify_ssl,
+            timeout=8,
+        )
+
+        self.spinner.set_message("Fetching response")
+
+        if not results or results.startswith("Error"):
+            print(
+                "[Claudette] Web search failed: {0}".format(
+                    results or "no results"
+                )
+            )
+            sublime.set_timeout(
+                lambda: sublime.status_message(
+                    "Claudette: web search unavailable — continuing without"
+                ),
+                0,
+            )
+            return system_messages
+
+        print(
+            "[Claudette] Web search OK ({0} chars)".format(len(results))
+        )
+
+        search_context = {
+            "type": "text",
+            "text": (
+                "The following are web search results for the user's "
+                "question. Use these to provide an accurate, up-to-date "
+                "answer. Cite sources where appropriate.\n\n"
+                "# Web Search Results\n\n"
+                + results
+            ),
+        }
+
+        return list(system_messages) + [search_context]
+
     def _request_non_streaming(
         self, messages, system_messages, tools_list=None,
         cancellation_token=None,
@@ -244,7 +359,9 @@ class ClaudetteClaudeAPI:
             "model": self.model,
             "stream": False,
             "system": system_messages,
-            "temperature": self.get_valid_temperature(self.temperature),
+            "temperature": self.get_valid_temperature(
+                self.temperature, self.is_anthropic
+            ),
         }
         if tools_list:
             data["tools"] = tools_list
@@ -258,7 +375,7 @@ class ClaudetteClaudeAPI:
 
         ssl_context = self._get_ssl_context()
         with urllib.request.urlopen(
-            req, context=ssl_context, timeout=30
+            req, context=ssl_context, timeout=self.request_timeout
         ) as response:
             # Read in chunks so we can check for cancellation mid-flight
             # instead of blocking for up to 30 seconds.
@@ -345,6 +462,12 @@ class ClaudetteClaudeAPI:
         web_search_tool = build_web_search_tool_def(self.settings)
         if web_search_tool:
             tools_list.append(web_search_tool)
+        web_fetch_tool_def = build_web_fetch_tool_def(self.settings)
+        if web_fetch_tool_def:
+            tools_list.append(web_fetch_tool_def)
+        client_search_tool_def = build_client_web_search_tool_def(self.settings)
+        if client_search_tool_def:
+            tools_list.append(client_search_tool_def)
 
         # chat_view may be sublime View or ClaudetteChatView (.view,
         # .set_tool_status, .clear_tool_status).
@@ -354,6 +477,9 @@ class ClaudetteClaudeAPI:
         )
 
         system_messages = self._build_system_messages(view_for_api)
+        system_messages = self._maybe_add_search_context(
+            filtered, system_messages
+        )
         window = view_for_api.window() if view_for_api else None
         settings = self.settings
         try:
@@ -431,70 +557,126 @@ class ClaudetteClaudeAPI:
                             assistant_content.append(block)
                         elif block.get("type") == "tool_use":
                             assistant_content.append(block)
+                            tool_name = block.get("name", "")
                             inp = block.get("input", {})
-                            raw_path = inp.get("path", "") or "file"
-                            cmd = inp.get("command", "view")
-                            action = {
-                                "view": "Reading",
-                                "str_replace": "Editing",
-                                "create": "Creating",
-                                "insert": "Editing",
-                            }.get(cmd, "Processing")
-                            context_files = None
-                            if view_for_api and hasattr(
-                                view_for_api, "settings"
-                            ):
-                                context_files = view_for_api.settings().get(
-                                    "claudette_context_files"
+
+                            if tool_name == "web_fetch":
+                                url = inp.get("url", "")
+                                sublime.set_timeout(
+                                    lambda u=url: update_status(
+                                        "Fetching {0}...".format(
+                                            u[:60]
+                                        )
+                                    ), 0
                                 )
-                            allowed_roots = get_allowed_roots(window, settings)
-                            resolved, _ = resolve_path(
-                                raw_path,
-                                allowed_roots,
-                                context_files=context_files,
-                                window=window,
-                            )
-                            if resolved and allowed_roots:
-                                try:
-                                    for root in allowed_roots:
-                                        if (
-                                            os.path.commonpath(
-                                                [root, resolved]
+                                fetch_result = run_web_fetch(
+                                    url, verify_ssl=self.verify_ssl
+                                )
+                                tool_results.append({
+                                    "type": "tool_result",
+                                    "tool_use_id": block.get("id", ""),
+                                    "content": fetch_result,
+                                })
+                                check_cancelled()
+                            elif tool_name == "client_web_search":
+                                query = inp.get("query", "")
+                                sublime.set_timeout(
+                                    lambda q=query: update_status(
+                                        'Searching "{0}..."'.format(
+                                            q[:40]
+                                        )
+                                    ), 0
+                                )
+                                backend = self.settings.get(
+                                    "web_search_backend", "duckduckgo"
+                                )
+                                instance = self.settings.get(
+                                    "searxng_instance_url", ""
+                                )
+                                search_result = run_web_search(
+                                    query,
+                                    backend=backend,
+                                    searxng_instance=instance,
+                                    verify_ssl=self.verify_ssl,
+                                )
+                                tool_results.append({
+                                    "type": "tool_result",
+                                    "tool_use_id": block.get("id", ""),
+                                    "content": search_result,
+                                })
+                                check_cancelled()
+                            else:
+                                # Text editor tool
+                                raw_path = inp.get("path", "") or "file"
+                                cmd = inp.get("command", "view")
+                                action = {
+                                    "view": "Reading",
+                                    "str_replace": "Editing",
+                                    "create": "Creating",
+                                    "insert": "Editing",
+                                }.get(cmd, "Processing")
+                                context_files = None
+                                if view_for_api and hasattr(
+                                    view_for_api, "settings"
+                                ):
+                                    context_files = (
+                                        view_for_api.settings().get(
+                                            "claudette_context_files"
+                                        )
+                                    )
+                                allowed_roots = get_allowed_roots(
+                                    window, settings
+                                )
+                                resolved, _ = resolve_path(
+                                    raw_path,
+                                    allowed_roots,
+                                    context_files=context_files,
+                                    window=window,
+                                )
+                                if resolved and allowed_roots:
+                                    try:
+                                        for root in allowed_roots:
+                                            if (
+                                                os.path.commonpath(
+                                                    [root, resolved]
+                                                )
+                                                == root
+                                            ):
+                                                display_path = os.path.relpath(
+                                                    resolved, root
+                                                )
+                                                break
+                                        else:
+                                            display_path = os.path.basename(
+                                                resolved
                                             )
-                                            == root
-                                        ):
-                                            display_path = os.path.relpath(
-                                                resolved, root
-                                            )
-                                            break
-                                    else:
+                                    except ValueError:
                                         display_path = os.path.basename(
                                             resolved
                                         )
-                                except ValueError:
-                                    display_path = os.path.basename(resolved)
-                            else:
-                                display_path = (
-                                    os.path.basename(raw_path) or "file"
+                                else:
+                                    display_path = (
+                                        os.path.basename(raw_path) or "file"
+                                    )
+                                status_label = "{0} {1}".format(
+                                    action, display_path
                                 )
-                            status_label = "{0} {1}".format(
-                                action, display_path
-                            )
-                            sublime.set_timeout(
-                                lambda s=status_label: update_status(s), 0
-                            )
-                            result = run_text_editor_tool(
-                                block.get("id", ""),
-                                block.get("name", ""),
-                                inp,
-                                window,
-                                settings,
-                                max_characters=max_chars,
-                                context_files=context_files,
-                            )
-                            tool_results.append(result)
-                            # Check for cancellation after each tool execution
-                            check_cancelled()
+                                sublime.set_timeout(
+                                    lambda s=status_label: update_status(s),
+                                    0,
+                                )
+                                result = run_text_editor_tool(
+                                    block.get("id", ""),
+                                    block.get("name", ""),
+                                    inp,
+                                    window,
+                                    settings,
+                                    max_characters=max_chars,
+                                    context_files=context_files,
+                                )
+                                tool_results.append(result)
+                                # Check for cancellation after each tool exec
+                                check_cancelled()
 
                     user_content = tool_results
                     current_messages.append(
@@ -636,6 +818,321 @@ class ClaudetteClaudeAPI:
                 )
             handle_error("[Error] {0}".format(str(e)))
 
+    def run_with_client_tools_loop(
+        self,
+        chunk_callback,
+        messages,
+        chat_view,
+        on_complete_cb=None,
+        cancellation_token=None,
+    ):
+        """Run request loop with client-side web tools.
+
+        Uses non-streaming requests with tool execution loop so the AI can
+        use web_fetch and client_web_search, then continue until end_turn.
+
+        Works with ALL API providers (Anthropic, DeepSeek, OpenRouter, etc.).
+        """
+        def handle_error(error_msg):
+            sublime.set_timeout(
+                lambda: chunk_callback(error_msg, is_done=True), 0
+            )
+
+        def check_cancelled():
+            if cancellation_token and cancellation_token.is_cancelled():
+                raise CancelledException()
+
+        filtered = [m for m in messages if self._message_has_content(m)]
+        if not filtered:
+            return
+
+        if not self.api_key:
+            handle_error(
+                "[Error] The API key is not set. Please check your API key "
+                "configuration."
+            )
+            return
+
+        tools_list = []
+        web_fetch_tool_def = build_web_fetch_tool_def(self.settings)
+        if web_fetch_tool_def:
+            tools_list.append(web_fetch_tool_def)
+        client_search_tool_def = build_client_web_search_tool_def(self.settings)
+        if client_search_tool_def:
+            tools_list.append(client_search_tool_def)
+
+        if not tools_list:
+            handle_error("[Error] No client tools are enabled.")
+            return
+
+        view_for_api = getattr(chat_view, "view", chat_view)
+        chat_view_for_status = (
+            chat_view if hasattr(chat_view, "set_tool_status") else None
+        )
+
+        system_messages = self._build_system_messages(view_for_api)
+        system_messages = self._maybe_add_search_context(
+            filtered, system_messages
+        )
+
+        try:
+            self.spinner.start("Fetching response")
+            current_messages = list(filtered)
+
+            while True:
+                check_cancelled()
+                try:
+                    msg, usage = self._request_non_streaming(
+                        current_messages, system_messages, tools_list,
+                        cancellation_token=cancellation_token,
+                    )
+                except urllib.error.HTTPError as e:
+                    self.spinner.stop()
+                    if chat_view_for_status:
+                        sublime.set_timeout(
+                            lambda: chat_view_for_status.clear_tool_status(), 0
+                        )
+                    error_type, error_message = parse_api_error(e)
+                    handle_error("[Error] {0}".format(error_message))
+                    return
+                except urllib.error.URLError as e:
+                    self.spinner.stop()
+                    if chat_view_for_status:
+                        sublime.set_timeout(
+                            lambda: chat_view_for_status.clear_tool_status(), 0
+                        )
+                    handle_error("[Error] {0}".format(str(e)))
+                    return
+
+                stop_reason = (msg.get("stop_reason") or "").strip() or None
+                content = msg.get("content") or []
+
+                if not stop_reason and content:
+                    has_text = any(
+                        isinstance(b, dict) and b.get("type") == "text"
+                        for b in content
+                    )
+                    if has_text:
+                        stop_reason = "end_turn"
+
+                if stop_reason == "tool_use":
+
+                    def update_status(label):
+                        self.spinner.set_message(label)
+                        if chat_view_for_status:
+                            chat_view_for_status.set_tool_status(label)
+
+                    tool_results = []
+                    assistant_content = []
+                    for block in content:
+                        if not isinstance(block, dict):
+                            continue
+                        if block.get("type") == "text" and block.get("text"):
+                            assistant_content.append(block)
+                        elif block.get("type") == "tool_use":
+                            assistant_content.append(block)
+                            tool_name = block.get("name", "")
+                            inp = block.get("input", {})
+
+                            if tool_name == "web_fetch":
+                                url = inp.get("url", "")
+                                sublime.set_timeout(
+                                    lambda u=url: update_status(
+                                        "Fetching {0}...".format(u[:60])
+                                    ), 0
+                                )
+                                result = run_web_fetch(
+                                    url, verify_ssl=self.verify_ssl
+                                )
+                                tool_results.append({
+                                    "type": "tool_result",
+                                    "tool_use_id": block.get("id", ""),
+                                    "content": result,
+                                })
+                                check_cancelled()
+                            elif tool_name == "client_web_search":
+                                query = inp.get("query", "")
+                                sublime.set_timeout(
+                                    lambda q=query: update_status(
+                                        'Searching "{0}"...'.format(q[:40])
+                                    ), 0
+                                )
+                                backend = self.settings.get(
+                                    "web_search_backend", "duckduckgo"
+                                )
+                                instance = self.settings.get(
+                                    "searxng_instance_url", ""
+                                )
+                                result = run_web_search(
+                                    query,
+                                    backend=backend,
+                                    searxng_instance=instance,
+                                    verify_ssl=self.verify_ssl,
+                                )
+                                tool_results.append({
+                                    "type": "tool_result",
+                                    "tool_use_id": block.get("id", ""),
+                                    "content": result,
+                                })
+                                check_cancelled()
+                            else:
+                                tool_results.append({
+                                    "type": "tool_result",
+                                    "tool_use_id": block.get("id", ""),
+                                    "content": (
+                                        "Error: Unknown tool '{0}'.".format(
+                                            tool_name
+                                        )
+                                    ),
+                                    "is_error": True,
+                                })
+
+                    current_messages.append({
+                        "role": "assistant", "content": assistant_content,
+                    })
+                    current_messages.append({
+                        "role": "user", "content": tool_results,
+                    })
+                    continue
+
+                if stop_reason == "end_turn":
+                    self.spinner.stop()
+                    if chat_view_for_status:
+                        sublime.set_timeout(
+                            lambda: chat_view_for_status.clear_tool_status(), 0
+                        )
+                    text_parts = []
+                    sources_lines = []
+
+                    for block in content:
+                        if not isinstance(block, dict):
+                            continue
+                        if block.get("type") == "text" and block.get("text"):
+                            text_parts.append(block["text"])
+                        elif (
+                            block.get("type") == "web_search_tool_result"
+                        ):
+                            items_lines, _ = parse_web_search_items(
+                                block.get("content", [])
+                            )
+                            sources_lines.extend(items_lines)
+
+                    final_text = "".join(text_parts)
+                    sources_text = format_search_results(sources_lines)
+                    if sources_text:
+                        sublime.set_timeout(
+                            lambda t=sources_text: chunk_callback(
+                                t, is_done=False
+                            ),
+                            0,
+                        )
+                    if final_text:
+                        sublime.set_timeout(
+                            lambda t=final_text: chunk_callback(
+                                t, is_done=False
+                            ),
+                            0,
+                        )
+
+                    input_tokens = usage.get("input_tokens", 0)
+                    output_tokens = usage.get("output_tokens", 0)
+                    cache_read_tokens = usage.get(
+                        "cache_read_input_tokens", 0
+                    )
+                    cache_write_tokens = usage.get(
+                        "cache_write_input_tokens", 0
+                    )
+                    server_tool_use = usage.get("server_tool_use", {})
+                    web_search_requests = server_tool_use.get(
+                        "web_search_requests", 0
+                    )
+
+                    current_cost = session_stats.calculate_cost(
+                        self.pricing,
+                        self.model,
+                        input_tokens,
+                        output_tokens,
+                        cache_read_tokens=cache_read_tokens,
+                        cache_write_tokens=cache_write_tokens,
+                    )
+                    web_search_cost = web_search_requests * (10.0 / 1000)
+                    current_cost += web_search_cost
+                    sess = update_session_stats(
+                        view_for_api,
+                        input_tokens,
+                        output_tokens,
+                        current_cost,
+                        web_search_requests,
+                    )
+                    if sess:
+                        cache_info = ""
+                        if usage.get("cache_read_input_tokens"):
+                            cache_info = " (cache read: {0:,})".format(
+                                usage.get("cache_read_input_tokens", 0)
+                            )
+                        elif usage.get("cache_write_input_tokens"):
+                            cache_info = " (cache write: {0:,})".format(
+                                usage.get("cache_write_input_tokens", 0)
+                            )
+                        status_msg = format_status_message(
+                            input_tokens,
+                            output_tokens,
+                            cache_info,
+                            current_cost,
+                            sess["cost"],
+                        )
+                        sublime.set_timeout(
+                            lambda s=status_msg: sublime.status_message(s), 100
+                        )
+                    usage_info = {
+                        "input_tokens": input_tokens,
+                        "output_tokens": output_tokens,
+                        "cost": current_cost,
+                        "session_cost": (
+                            sess["cost"] if sess else current_cost
+                        ),
+                    }
+                    sublime.set_timeout(
+                        lambda u=usage_info: chunk_callback(
+                            "", is_done=True, usage_info=u
+                        ),
+                        0,
+                    )
+                    return
+
+                self.spinner.stop()
+                if chat_view_for_status:
+                    sublime.set_timeout(
+                        lambda: chat_view_for_status.clear_tool_status(), 0
+                    )
+                handle_error(
+                    "[Error] Unexpected stop_reason: {0}. "
+                    "The API response may have a different structure.".format(
+                        repr(stop_reason) if stop_reason else "(empty)"
+                    )
+                )
+                return
+
+        except CancelledException:
+            self.spinner.stop()
+            if chat_view_for_status:
+                sublime.set_timeout(
+                    lambda: chat_view_for_status.clear_tool_status(), 0
+                )
+            sublime.set_timeout(
+                lambda: chunk_callback(
+                    "", is_done=True, was_cancelled=True
+                ),
+                0,
+            )
+        except Exception as e:
+            self.spinner.stop()
+            if chat_view_for_status:
+                sublime.set_timeout(
+                    lambda: chat_view_for_status.clear_tool_status(), 0
+                )
+            handle_error("[Error] {0}".format(str(e)))
+
     def stream_response(
         self, chunk_callback, messages, chat_view=None, cancellation_token=None
     ):
@@ -686,6 +1183,9 @@ class ClaudetteClaudeAPI:
             ]
 
             system_messages = self._build_system_messages(chat_view)
+            system_messages = self._maybe_add_search_context(
+                filtered_messages, system_messages
+            )
 
             data = {
                 "messages": filtered_messages,
@@ -693,7 +1193,9 @@ class ClaudetteClaudeAPI:
                 "model": self.model,
                 "stream": True,
                 "system": system_messages,
-                "temperature": self.get_valid_temperature(self.temperature),
+                "temperature": self.get_valid_temperature(
+                    self.temperature, self.is_anthropic
+                ),
             }
 
             web_search_tool = build_web_search_tool_def(self.settings)
@@ -715,7 +1217,7 @@ class ClaudetteClaudeAPI:
 
                 # Use a timeout so connection doesn't hang forever
                 with urllib.request.urlopen(
-                    req, context=ssl_context, timeout=30
+                    req, context=ssl_context, timeout=self.request_timeout
                 ) as response:
                     # Get socket for select-based polling with timeout
                     # This allows us to periodically check for cancellation
@@ -1109,13 +1611,25 @@ class ClaudetteClaudeAPI:
             self.spinner.stop()
 
     def fetch_models(self):
+        """Return available model IDs.
 
+        For non-Anthropic providers the /models endpoint often does not
+        exist or returns an unsupported payload. In that case, fall back
+        to the `models` setting (a static list) so the Switch Model panel
+        still works.
+        """
         if not self.api_key:
             sublime.error_message(
                 "The API key is undefined. Please check your API key "
                 "configuration."
             )
             return []
+
+        fallback = self.settings.get("models") or []
+        if isinstance(fallback, str):
+            fallback = [fallback]
+        if not isinstance(fallback, list):
+            fallback = []
 
         try:
             sublime.status_message("Fetching models")
@@ -1133,33 +1647,91 @@ class ClaudetteClaudeAPI:
             )
 
             ssl_context = self._get_ssl_context()
-            with urllib.request.urlopen(req, context=ssl_context) as response:
-                data = json.loads(response.read().decode("utf-8"))
-                model_ids = [item["id"] for item in data["data"]]
+            with urllib.request.urlopen(
+                req, context=ssl_context, timeout=20
+            ) as response:
+                raw = response.read().decode("utf-8")
+                if not raw.strip():
+                    raise ValueError("empty response body")
+                data = json.loads(raw)
+                data_list = data.get("data") if isinstance(data, dict) else None
+                if (
+                    not isinstance(data_list, list)
+                    or not data_list
+                ):
+                    raise ValueError("no model data in response")
+                model_ids = []
+                for item in data_list:
+                    if isinstance(item, dict) and item.get("id"):
+                        model_ids.append(item["id"])
+                if not model_ids:
+                    raise ValueError("no model ids parsed")
                 sublime.status_message("")
                 return model_ids
 
         except urllib.error.HTTPError as e:
             if e.code == 401:
                 print("Claude API: {0}".format(str(e)))
+                if fallback:
+                    sublime.status_message(
+                        "Using configured model list (auth failed)"
+                    )
+                    return list(fallback)
                 sublime.error_message(
                     "Authentication invalid when fetching the available "
                     "models from the Claude API."
                 )
             else:
                 print("Claude API: {0}".format(str(e)))
+                if fallback:
+                    sublime.status_message(
+                        "Using configured model list (fetch failed)"
+                    )
+                    return list(fallback)
+                if not self.is_anthropic:
+                    sublime.error_message(
+                        "Could not fetch models from {0} (HTTP {1}).\n\n"
+                        "This provider may not expose a /models endpoint. "
+                        "Add a \"models\" list to your Claudette settings "
+                        "(e.g. [\"deepseek-chat\", \"deepseek-reasoner\"]) "
+                        "to enable the Switch Model command.".format(
+                            self.base_url, e.code
+                        )
+                    )
+                else:
+                    sublime.error_message(
+                        "An error occurred fetching the available models "
+                        "from the Claude API."
+                    )
+        except (urllib.error.URLError, ValueError) as e:
+            print("Claude API: {0}".format(str(e)))
+            if fallback:
+                sublime.status_message(
+                    "Using configured model list (endpoint unavailable)"
+                )
+                return list(fallback)
+            if not self.is_anthropic:
+                sublime.error_message(
+                    "Could not fetch models from {0}.\n\n"
+                    "This provider may not expose a /models endpoint. "
+                    "Add a \"models\" list to your Claudette settings "
+                    "(e.g. [\"deepseek-chat\", \"deepseek-reasoner\"]) "
+                    "to enable the Switch Model command.".format(
+                        self.base_url
+                    )
+                )
+            else:
                 sublime.error_message(
                     "An error occurred fetching the available models from "
                     "the Claude API."
                 )
-        except urllib.error.URLError as e:
-            print("Claude API: {0}".format(str(e)))
-            sublime.error_message(
-                "An error occurred fetching the available models from the "
-                "Claude API."
-            )
         except Exception as e:
             print("Claude API: {0}".format(str(e)))
+            if fallback:
+                sublime.status_message(
+                    "Using configured model list (fetch error)"
+                )
+                return list(fallback)
             sublime.error_message(
                 "An error occurred fetching the available models from the "
                 "Claude API."

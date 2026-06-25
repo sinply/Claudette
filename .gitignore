@@ -2,6 +2,7 @@
 .env
 .venv
 repomix-output.*
+.cache/
 
 # Python
 __pycache__/

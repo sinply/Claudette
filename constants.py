@@ -4,6 +4,12 @@ ANTHROPIC_VERSION = "2023-06-01"
 DEFAULT_MODEL = "claude-sonnet-4-5"
 DEFAULT_BASE_URL = "https://api.anthropic.com/v1/"
 MAX_TOKENS = 8192
+# Non-streaming requests with tool loops may take a while on reasoning models.
+DEFAULT_REQUEST_TIMEOUT = 180
+# Anthropic models cap temperature at 1.0; other providers (e.g. DeepSeek)
+# allow up to 2.0.
+MAX_TEMPERATURE_ANTHROPIC = 1.0
+MAX_TEMPERATURE_OTHER = 2.0
 PLUGIN_NAME = "Claudette"
 SETTINGS_FILE = "Claudette.sublime-settings"
 DEFAULT_VERIFY_SSL = True
